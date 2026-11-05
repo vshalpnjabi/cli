@@ -12,9 +12,10 @@ import (
 
 func Test_HasMinimumScopes(t *testing.T) {
 	tests := []struct {
-		name    string
-		header  string
-		wantErr string
+		name        string
+		header      string
+		extraScopes []string
+		wantErr     string
 	}{
 		{
 			name:    "write:org satisfies read:org",
@@ -25,6 +26,18 @@ func Test_HasMinimumScopes(t *testing.T) {
 			name:    "insufficient scope",
 			header:  "repo",
 			wantErr: "missing required scope 'read:org'",
+		},
+		{
+			name:        "with extra scope present",
+			header:      "repo, read:org, workflow",
+			extraScopes: []string{"workflow"},
+			wantErr:     "",
+		},
+		{
+			name:        "with extra scope missing",
+			header:      "repo, read:org",
+			extraScopes: []string{"workflow"},
+			wantErr:     "missing required scope 'workflow'",
 		},
 	}
 	for _, tt := range tests {
@@ -46,7 +59,7 @@ func Test_HasMinimumScopes(t *testing.T) {
 			})
 
 			client := http.Client{Transport: fakehttp}
-			err := HasMinimumScopes(&client, "github.com", "ATOKEN")
+			err := HasMinimumScopes(&client, "github.com", "ATOKEN", tt.extraScopes...)
 			if tt.wantErr != "" {
 				assert.EqualError(t, err, tt.wantErr)
 			} else {
@@ -59,9 +72,10 @@ func Test_HasMinimumScopes(t *testing.T) {
 
 func Test_HeaderHasMinimumScopes(t *testing.T) {
 	tests := []struct {
-		name    string
-		header  string
-		wantErr string
+		name        string
+		header      string
+		extraScopes []string
+		wantErr     string
 	}{
 		{
 			name:    "no scopes",
@@ -93,11 +107,23 @@ func Test_HeaderHasMinimumScopes(t *testing.T) {
 			header:  "gist",
 			wantErr: "missing required scopes 'repo', 'read:org'",
 		},
+		{
+			name:        "extra scope present",
+			header:      "repo, read:org, workflow",
+			extraScopes: []string{"workflow"},
+			wantErr:     "",
+		},
+		{
+			name:        "extra scope missing",
+			header:      "repo, read:org",
+			extraScopes: []string{"workflow"},
+			wantErr:     "missing required scope 'workflow'",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			err := HeaderHasMinimumScopes(tt.header)
+			err := HeaderHasMinimumScopes(tt.header, tt.extraScopes...)
 			if tt.wantErr != "" {
 				assert.EqualError(t, err, tt.wantErr)
 			} else {

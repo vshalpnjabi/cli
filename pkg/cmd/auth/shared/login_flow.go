@@ -234,7 +234,7 @@ func Login(opts *LoginOptions) error {
 			return err
 		}
 
-		if err := HasMinimumScopes(httpClient, hostname, authToken); err != nil {
+		if err := HasMinimumScopes(httpClient, hostname, authToken, additionalScopes...); err != nil {
 			return fmt.Errorf("error validating token: %w", err)
 		}
 	}

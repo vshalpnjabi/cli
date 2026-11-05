@@ -354,7 +354,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				InsecureStorage: true,
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
@@ -370,7 +370,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				InsecureStorage: true,
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
@@ -385,7 +385,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				InsecureStorage: true,
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", "api/v3/"), httpmock.ScopesResponder("repo,read:org"))
+				reg.Register(httpmock.REST("GET", "api/v3/"), httpmock.ScopesResponder("repo,read:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
@@ -399,7 +399,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				Token:    "abc456",
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("read:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("read:org,workflow"))
 			},
 			wantErr: `error validating token: missing required scope 'repo'`,
 		},
@@ -410,9 +410,35 @@ func Test_loginRun_nontty(t *testing.T) {
 				Token:    "abc456",
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,workflow"))
 			},
 			wantErr: `error validating token: missing required scope 'read:org'`,
+		},
+		{
+			name: "with-token missing advertised workflow scope",
+			opts: &LoginOptions{
+				Hostname: "github.com",
+				Token:    "abc456",
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org"))
+			},
+			wantErr: `error validating token: missing required scope 'workflow'`,
+		},
+		{
+			name: "with-token has advertised workflow scope",
+			opts: &LoginOptions{
+				Hostname:        "github.com",
+				Token:           "abc456",
+				InsecureStorage: true,
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org,workflow"))
+				reg.Register(
+					httpmock.GraphQL(`query UserCurrent\b`),
+					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
+			},
+			wantHosts: "github.com:\n    users:\n        monalisa:\n            oauth_token: abc456\n    oauth_token: abc456\n    user: monalisa\n",
 		},
 		{
 			name: "has admin scope",
@@ -422,7 +448,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				InsecureStorage: true,
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,admin:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,admin:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
@@ -462,7 +488,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				Token:    "abc123",
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"monalisa"}}}`))
@@ -481,7 +507,7 @@ func Test_loginRun_nontty(t *testing.T) {
 				require.NoError(t, err)
 			},
 			httpStubs: func(reg *httpmock.Registry) {
-				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org"))
+				reg.Register(httpmock.REST("GET", ""), httpmock.ScopesResponder("repo,read:org,workflow"))
 				reg.Register(
 					httpmock.GraphQL(`query UserCurrent\b`),
 					httpmock.StringResponse(`{"data":{"viewer":{"login":"newUser"}}}`))
