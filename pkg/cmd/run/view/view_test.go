@@ -969,6 +969,28 @@ func TestViewRun(t *testing.T) {
 			wantOut: quuxTheBarfLogOutput,
 		},
 		{
+			name: "noninteractive with job log-failed when workflow metadata returns 404 (#14822)",
+			opts: &ViewOptions{
+				JobID:     "20",
+				LogFailed: true,
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/jobs/20"),
+					httpmock.JSONResponse(shared.FailedJob))
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/runs/1234"),
+					httpmock.JSONResponse(shared.FailedRun))
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/runs/1234/logs"),
+					httpmock.BinaryResponse(zipArchive))
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/workflows/123"),
+					httpmock.StatusStringResponse(404, "not found"))
+			},
+			wantOut: quuxTheBarfLogOutput,
+		},
+		{
 			name: "interactive with run log-failed",
 			tty:  true,
 			opts: &ViewOptions{
@@ -2582,6 +2604,35 @@ func TestViewRun(t *testing.T) {
 					httpmock.StringResponse(`{"jobs":[{},{}]}`))
 			},
 			wantOut: "fetched 5 jobs\n",
+		},
+		{
+			name: "Fetches jobs with --json when workflow metadata returns 404 (#14822)",
+			opts: &ViewOptions{
+				RunID: "3",
+				Exporter: shared.MakeTestExporter(
+					[]string{"jobs"},
+					func(io *iostreams.IOStreams, data any) error {
+						run, ok := data.(*shared.Run)
+						if !ok {
+							return fmt.Errorf("expected data type *shared.Run")
+						}
+						fmt.Fprintf(io.Out, "fetched %d jobs workflowName=%q\n", len(run.Jobs), run.WorkflowName())
+						return nil
+					},
+				),
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/runs/3"),
+					httpmock.JSONResponse(shared.SuccessfulRun))
+				reg.Register(
+					httpmock.REST("GET", "repos/OWNER/REPO/actions/workflows/123"),
+					httpmock.StatusStringResponse(404, "not found"))
+				reg.Register(
+					httpmock.QueryMatcher("GET", "runs/3/jobs", url.Values{"per_page": []string{"100"}}),
+					httpmock.StringResponse(`{"jobs":[{},{}]}`))
+			},
+			wantOut: "fetched 2 jobs workflowName=\"\"\n",
 		},
 		{
 			name: "Returns error when failing to get annotations",

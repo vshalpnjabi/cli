@@ -455,24 +455,11 @@ func preloadWorkflowNames(client *api.Client, repo ghrepo.Interface, runs []Run)
 
 	for i, run := range runs {
 		if _, ok := workflowMap[run.WorkflowID]; !ok {
-			// Look up workflow by ID because it may have been deleted
-			workflow, err := workflowShared.GetWorkflow(client, repo, run.WorkflowID)
-			// If the error is an httpError and it is a 404, this is likely a
-			// organization or enterprise ruleset workflow. The user does not
-			// have permissions to view the details of the workflow, so we cannot
-			// look it up directly without receiving a 404, but it is nonetheless
-			// in the workflow run list. To handle this, we set the workflow name
-			// to an empty string.
-			// Deciding to put this here instead of in GetWorkflow to allow
-			// the caller to decide what a 404 means.
-			if httpErr, ok := err.(api.HTTPError); ok && httpErr.StatusCode == 404 {
-				workflowMap[run.WorkflowID] = ""
-				continue
-			}
+			name, err := lookupWorkflowName(client, repo, run.WorkflowID)
 			if err != nil {
 				return err
 			}
-			workflowMap[run.WorkflowID] = workflow.Name
+			workflowMap[run.WorkflowID] = name
 		}
 		runs[i].workflowName = workflowMap[run.WorkflowID]
 	}
@@ -584,15 +571,32 @@ func GetRun(client *api.Client, repo ghrepo.Interface, runID string, attempt uin
 		}
 	}
 
-	// Set name to workflow name
-	workflow, err := workflowShared.GetWorkflow(client, repo, result.WorkflowID)
+	name, err := lookupWorkflowName(client, repo, result.WorkflowID)
 	if err != nil {
 		return nil, err
-	} else {
-		result.workflowName = workflow.Name
 	}
+	result.workflowName = name
 
 	return &result, nil
+}
+
+// lookupWorkflowName returns the human-readable name of a workflow.
+//
+// A 404 is treated as an organization or enterprise ruleset workflow that is
+// not listed in the consumer repository. The run itself can still be read, so
+// an empty name is returned instead of failing. Other errors are returned so
+// callers can decide how to handle them. This lives here rather than in
+// GetWorkflow so that a 404 can mean different things at different call sites.
+func lookupWorkflowName(client *api.Client, repo ghrepo.Interface, workflowID int64) (string, error) {
+	workflow, err := workflowShared.GetWorkflow(client, repo, workflowID)
+	if err != nil {
+		var httpErr api.HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			return "", nil
+		}
+		return "", err
+	}
+	return workflow.Name, nil
 }
 
 type colorFunc func(string) string

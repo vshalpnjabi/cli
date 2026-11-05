@@ -3,6 +3,7 @@ package shared
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/ghrepo"
+	workflowShared "github.com/cli/cli/v2/pkg/cmd/workflow/shared"
 	"github.com/cli/cli/v2/pkg/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +58,68 @@ func TestGetAnnotations404(t *testing.T) {
 	result, err := GetAnnotations(apiClient, repo, Job{ID: 123456, Name: "a job"})
 	assert.NoError(t, err)
 	assert.Equal(t, result, []Annotation{})
+}
+
+func TestGetRun(t *testing.T) {
+	tests := []struct {
+		name             string
+		run              Run
+		workflowStub     httpmock.Responder
+		wantWorkflowName string
+		wantErr          bool
+	}{
+		{
+			name: "in-repo workflow sets the workflow name",
+			run:  TestRun(1234, Completed, Failure),
+			workflowStub: httpmock.JSONResponse(workflowShared.Workflow{
+				Name: "CI",
+				ID:   123,
+			}),
+			wantWorkflowName: "CI",
+		},
+		{
+			name:             "organization-required workflow 404 leaves the workflow name empty",
+			run:              TestRunWithOrgRequiredWorkflow(1234, Completed, Failure, "cool commit"),
+			workflowStub:     httpmock.StatusStringResponse(404, "not found"),
+			wantWorkflowName: "",
+		},
+		{
+			name:         "non-404 workflow metadata errors still fail",
+			run:          TestRun(1234, Completed, Failure),
+			workflowStub: httpmock.StatusStringResponse(500, "boom"),
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := &httpmock.Registry{}
+			defer reg.Verify(t)
+
+			reg.Register(
+				httpmock.REST("GET", "repos/OWNER/REPO/actions/runs/1234"),
+				httpmock.JSONResponse(tt.run))
+			reg.Register(
+				httpmock.REST("GET", fmt.Sprintf("repos/OWNER/REPO/actions/workflows/%d", tt.run.WorkflowID)),
+				tt.workflowStub)
+
+			httpClient := &http.Client{Transport: reg}
+			apiClient := api.NewClientFromHTTP(httpClient)
+			repo := ghrepo.New("OWNER", "REPO")
+
+			result, err := GetRun(apiClient, repo, "1234", 0)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.run.ID, result.ID)
+			assert.Equal(t, tt.run.WorkflowID, result.WorkflowID)
+			assert.Equal(t, tt.wantWorkflowName, result.WorkflowName())
+		})
+	}
 }
 
 func TestRun_Duration(t *testing.T) {
