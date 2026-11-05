@@ -275,10 +275,17 @@ func developRunCreate(opts *DevelopOptions, apiClient *api.Client, issueRepo ghr
 		fmt.Fprintf(opts.IO.ErrOut, "Using existing linked branch %q\n", branchName)
 	}
 
-	// Remember which branch to target when creating a PR.
+	// Remember which branch to target when creating a PR. The local
+	// gh-merge-base hint only applies inside a git repository.
 	if opts.BaseBranch != "" {
-		if err := opts.GitClient.SetBranchConfig(ctx.Background(), branchName, git.MergeBaseConfig, opts.BaseBranch); err != nil {
+		inRepo, err := opts.GitClient.IsLocalGitRepo(ctx.Background())
+		if err != nil {
 			return err
+		}
+		if inRepo {
+			if err := opts.GitClient.SetBranchConfig(ctx.Background(), branchName, git.MergeBaseConfig, opts.BaseBranch); err != nil {
+				return err
+			}
 		}
 	}
 

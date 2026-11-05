@@ -414,6 +414,7 @@ func TestDevelopRun(t *testing.T) {
 				)
 			},
 			runStubs: func(cs *run.CommandStubber) {
+				cs.Register(`git rev-parse --git-dir`, 0, ".git")
 				cs.Register(`git fetch origin \+refs/heads/my-branch:refs/remotes/origin/my-branch`, 0, "")
 				cs.Register(`git config branch\.my-branch\.gh-merge-base main`, 0, "")
 			},
@@ -454,6 +455,7 @@ func TestDevelopRun(t *testing.T) {
 					httpmock.StringResponse(`{"data":{"repository":{"id":"REPOID","ref":{"target":{"oid":"OID"}}}}}`))
 			},
 			runStubs: func(cs *run.CommandStubber) {
+				cs.Register(`git rev-parse --git-dir`, 0, ".git")
 				cs.Register(`git config branch\.my-branch\.gh-merge-base main`, 0, "")
 				cs.Register(`git fetch origin \+refs/heads/my-branch:refs/remotes/origin/my-branch`, 0, "")
 				cs.Register(`git rev-parse --verify refs/heads/my-branch`, 0, "")
@@ -497,6 +499,7 @@ func TestDevelopRun(t *testing.T) {
 					httpmock.StringResponse(`{"data":{"repository":{"id":"REPOID","ref":{"target":{"oid":"OID"}}}}}`))
 			},
 			runStubs: func(cs *run.CommandStubber) {
+				cs.Register(`git rev-parse --git-dir`, 0, ".git")
 				cs.Register(`git config branch\.my-branch\.gh-merge-base main`, 0, "")
 				cs.Register(`git fetch origin \+refs/heads/my-branch:refs/remotes/origin/my-branch`, 0, "")
 			},
@@ -608,6 +611,43 @@ func TestDevelopRun(t *testing.T) {
 							assert.Equal(t, "DEFAULTOID", inputs["oid"])
 						}),
 				)
+			},
+			expectedOut: "github.com/cli/cli/tree/my-issue-1\n",
+		},
+		{
+			name: "develop new branch with base specified outside of local git repo",
+			opts: &DevelopOptions{
+				IssueNumber: 123,
+				BaseBranch:  "main",
+				BaseRepo: func() (ghrepo.Interface, error) {
+					return ghrepo.New("cli", "cli"), nil
+				},
+			},
+			httpStubs: func(reg *httpmock.Registry, t *testing.T) {
+				reg.Register(
+					httpmock.GraphQL(`query LinkedBranchFeature\b`),
+					httpmock.StringResponse(featureEnabledPayload),
+				)
+				reg.Register(
+					httpmock.GraphQL(`query IssueByNumber\b`),
+					httpmock.StringResponse(`{"data":{"repository":{"hasIssuesEnabled":true,"issue":{"id": "SOMEID","number":123,"title":"my issue"}}}}`),
+				)
+				reg.Register(
+					httpmock.GraphQL(`query FindRepoBranchID\b`),
+					httpmock.StringResponse(`{"data":{"repository":{"id":"REPOID","ref":{"target":{"oid":"OID"}}}}}`),
+				)
+				reg.Register(
+					httpmock.GraphQL(`mutation CreateLinkedBranch\b`),
+					httpmock.GraphQLMutation(`{"data":{"createLinkedBranch":{"linkedBranch":{"id":"2","ref":{"name":"my-issue-1"}}}}}`,
+						func(inputs map[string]any) {
+							assert.Equal(t, "REPOID", inputs["repositoryId"])
+							assert.Equal(t, "SOMEID", inputs["issueId"])
+							assert.Equal(t, "OID", inputs["oid"])
+						}),
+				)
+			},
+			runStubs: func(cs *run.CommandStubber) {
+				cs.Register(`git rev-parse --git-dir`, 128, "")
 			},
 			expectedOut: "github.com/cli/cli/tree/my-issue-1\n",
 		},
