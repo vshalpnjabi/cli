@@ -312,6 +312,13 @@ func forkRun(opts *ForkOptions) error {
 				return err
 			}
 
+			parentRemoteName := ""
+			if remote, err := remotes.FindByRepo(repoToFork.RepoOwner(), repoToFork.RepoName()); err == nil {
+				parentRemoteName = remote.Name
+			}
+			_, defaultRepoErr := remotes.ResolvedRemote()
+			hasDefaultRepo := defaultRepoErr == nil
+
 			if _, err := remotes.FindByName(remoteName); err == nil {
 				if opts.Rename {
 					renameTarget := "upstream"
@@ -327,6 +334,10 @@ func forkRun(opts *ForkOptions) error {
 					if connectedToTerminal {
 						fmt.Fprintf(stderr, "%s Renamed remote %s to %s\n", cs.SuccessIcon(), cs.Bold(remoteName), cs.Bold(renameTarget))
 					}
+
+					if parentRemoteName == remoteName {
+						parentRemoteName = renameTarget
+					}
 				} else {
 					return fmt.Errorf("a git remote named '%s' already exists", remoteName)
 				}
@@ -341,6 +352,15 @@ func forkRun(opts *ForkOptions) error {
 
 			if connectedToTerminal {
 				fmt.Fprintf(stderr, "%s Added remote %s\n", cs.SuccessIcon(), cs.Bold(remoteName))
+			}
+
+			if !hasDefaultRepo && parentRemoteName != "" {
+				if err := gitClient.SetRemoteResolution(ctx, parentRemoteName, "base"); err != nil {
+					return err
+				}
+				if connectedToTerminal {
+					fmt.Fprintf(stderr, "%s Repository %s set as the default repository. To learn more about the default repository, run: gh repo set-default --help\n", cs.WarningIcon(), cs.Bold(ghrepo.FullName(repoToFork)))
+				}
 			}
 		}
 	} else {
